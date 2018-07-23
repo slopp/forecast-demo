@@ -4,21 +4,31 @@ subtitle: '`r Sys.Date()`'
 output: powerpoint_presentation
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
 ## Summary
 
-We closed out `r format(today(), format="%A %B %d %Y")` at `r todays_sales` units. 
+We closed out `r format(lubridate::today(), format="%A %B %d %Y")` at `r todays_sales` units. 
 
-```{r fig.height=4, fig.width=6, fig.cap="Historical Sales YTD"}
+## Trending Up!
+
+```{r fig.height=4, fig.width=6, fig.cap="Year to Date"}
 p
 ```
 
 
-## Forecast
+## Looking Ahead
 
-```{r fig.height=6, fig.width=6, fig.cap="Next Month Forecast"}
+```{r fig.height=6, fig.width=6}
 fp
 ```
 
 ## Conclusion
 
-Sales leading out of `r Sys.Date()` are projected to decrease. 
+Sales leading out of `r Sys.Date()` are projected to increase. 

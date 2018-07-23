@@ -21,6 +21,7 @@ library(timetk)
 library(rstudiointernal)
 library(blastula)
 library(glue)
+library(callr)
 ```
 
 ```{r, out.width = "75px"}
@@ -157,6 +158,7 @@ predicted <- forecast(m, h = 4)
 fp <- autoplot(predicted) +
   scale_x_continuous(breaks = NULL) +
   labs(
+    title = NULL,
     y  = "Unit Sales",
     x = "Forecast Through Next Month"
   )
@@ -168,9 +170,15 @@ fp
 Based on the historical data provided, we expect declining sales.
 
 ```{r attachment}
-rmarkdown::render('ppt_template.Rmd', 
-                  output_file = 'sales_summary.pptx', 
-                  quiet = TRUE )
+# render ppt in a new function to avoid RMD side affects that break things
+callr::r_copycat(
+  function(todays_sales, p , fp){
+    rmarkdown::render('ppt_template.Rmd', 
+                      output_file = 'sales_summary.pptx', 
+                      quiet = TRUE )
+  }, 
+  list(todays_sales, p, fp)
+)
 write.csv(widget_sales, file = 'sales_data.xlsx')
 rmarkdown::output_metadata$set('rsc_output_files' = c('sales_summary.pptx', 'sales_data.xlsx'))
 rmarkdown::output_metadata$set('rsc_email_attachments' = c('sales_summary.pptx', 'sales_data.xlsx'))
