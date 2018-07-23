@@ -1,0 +1,204 @@
+---
+title: "Sales Forecast"
+output: 
+  html_document: 
+    code_folding: hide
+    css: styles.css
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
+library(tidyverse)
+library(tibbletime)
+library(lubridate)
+library(forecast)
+library(timetk)
+library(rstudiointernal)
+library(blastula)
+library(glue)
+```
+
+```{r, out.width = "75px"}
+knitr::include_graphics(rstudiointernal::get_logo_url())
+```
+
+```{r generate-data}
+number_of_days <- 365
+sales_period <- today() - 1:number_of_days
+
+
+trend <- function(x, amount) {
+  x * amount
+}
+
+seasonal <- function(x, offset, amount) {
+  amount * sin(2 * pi * (x + offset) / 365)
+}
+
+noise <- function(x, amount) {
+  runif(n = x, min = -amount, max = amount)
+}
+
+generate_series <- function(number_of_days, 
+                            offset, 
+                            trend_amount, 
+                            seasonal_offset, 
+                            seasonal_amount, 
+                            noise_amount) {
+
+  series <- offset +
+    trend(1:number_of_days, trend_amount) +
+    seasonal(1:number_of_days, seasonal_offset, seasonal_amount) +
+    noise(1:number_of_days, noise_amount)
+  
+  ts(series, frequency = 365)
+}
+
+widget_sales <- tibble(
+  'date' = sales_period,
+  'widget_basic_sales' = generate_series(
+    365,
+    offset = 500,
+    trend_amount = -700 / 365,
+    seasonal_offset = 270,
+    seasonal_amount = 30,
+    noise_amount = 300
+  ),
+  
+  'widget_killdozer_sales' = generate_series(
+    365,
+    offset = 500,
+    trend_amount = -500 / 365,
+    seasonal_offset = 315,
+    seasonal_amount = 30,
+    noise_amount = 200
+  ),
+  
+  'widget_master_sales' = generate_series(
+    365,
+    offset = 600,
+    trend_amount = -400 / 365,
+    seasonal_offset = 0,
+    seasonal_amount = 60,
+    noise_amount = 400
+  )  
+)
+
+widget_sales <- mutate(
+  widget_sales, 
+  total_sales = widget_basic_sales + widget_killdozer_sales + widget_master_sales
+)
+todays_sales <- abs(round(as.numeric(tail(widget_sales$total_sales, 1)),0))
+widget_sales <- as_tbl_time(widget_sales, index = date)
+```
+
+
+
+### Executive Summary - `r today()`
+
+`r format(today(), format="%A %B %d %Y")` closed sales at `r todays_sales` units.  A sales forecast for the remainder of the year follows based on historical sales data. 
+
+```{r historical_plot}
+label_maker <- function(x){
+  y <- stringr::str_replace_all(x, '_', ' ')
+  z <- stringr::str_to_title(y)
+  z
+}
+p <- widget_sales %>% 
+  gather(
+    key = 'product',
+    value = "sales",
+    widget_basic_sales,
+    widget_killdozer_sales,
+    widget_master_sales,
+    total_sales
+  ) %>%
+  arrange(date) %>% 
+  ggplot(aes(x = date, y = sales, color = product, group = product)) +
+    geom_line(alpha = 0.3) + 
+    geom_smooth(span = 0.3, method = "loess", se=FALSE) + 
+    facet_wrap(~product,scales = "free_y", labeller = as_labeller(label_maker)) +
+    theme_rstudio() +
+    scale_color_rstudio(guide = FALSE) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(
+      title = "Daily Widget Sales Data",
+      x = NULL,
+      y = "Units Sold",
+      color = NULL
+    )
+p
+```
+
+### Approach
+
+A simple model is fit on the total sales from the spreadsheet. The model incorporates level, trend, and seasonality components, all of which may be present in our sales data.
+
+Once the model was fit, a forecast is made using that model. The results of the analysis have been published to our RStudio Connect server where others within the company can view them. The model is re-run daily and an updated forecast is emailed to stakeholders. The email includes an inline graph summarizing the sales data.
+
+### Results
+
+
+```{r}
+widget_sales_ts <- widget_sales %>%
+  arrange(date) %>% 
+  collapse_by("weekly") %>% 
+  group_by(date) %>% 
+  summarise(total_sales = sum(total_sales)) %>% 
+  head(nrow(.)-1) %>% # remove the last partial week
+  tk_ts()
+m <- arima(widget_sales_ts,order = c(1, 2, 2))
+predicted <- forecast(m, h = 4)
+fp <- autoplot(predicted) +
+  scale_x_continuous(breaks = NULL) +
+  labs(
+    y  = "Unit Sales",
+    x = "Forecast Through Next Month"
+  )
+fp
+```
+
+### Conclusions
+
+Based on the historical data provided, we expect declining sales.
+
+```{r attachment}
+rmarkdown::render('ppt_template.Rmd', 
+                  output_file = 'sales_summary.pptx', 
+                  quiet = TRUE )
+write.csv(widget_sales, file = 'sales_data.xlsx')
+rmarkdown::output_metadata$set('rsc_output_files' = c('sales_summary.pptx', 'sales_data.xlsx'))
+rmarkdown::output_metadata$set('rsc_email_attachments' = c('sales_summary.pptx', 'sales_data.xlsx'))
+```
+
+
+```{r email, echo=TRUE}
+subject <- glue("Sales closed today at {todays_sales} units.")
+email <- compose_email(
+  body = "
+   Hi Team,
+
+
+   Great job! {Sys.Date()} closed at {todays_sales}. See details below:
+
+
+   {add_ggplot(p, width = 6, height = 6)}
+ 
+   Best,
+   
+   Jim
+
+   VP Sales
+
+  "
+)
+
+rmarkdown::output_metadata$set("rsc_email_subject" = subject)
+rmarkdown::output_metadata$set("rsc_email_body_html" = email$html_str)
+rmarkdown::output_metadata$set("rsc_email_images" = email$images)
+```

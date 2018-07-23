@@ -1,0 +1,24 @@
+---
+title: 'Sales Forecast'
+subtitle: '`r Sys.Date()`'
+output: powerpoint_presentation
+---
+
+## Summary
+
+We closed out `r format(today(), format="%A %B %d %Y")` at `r todays_sales` units. 
+
+```{r fig.height=4, fig.width=6, fig.cap="Historical Sales YTD"}
+p
+```
+
+
+## Forecast
+
+```{r fig.height=6, fig.width=6, fig.cap="Next Month Forecast"}
+fp
+```
+
+## Conclusion
+
+Sales leading out of `r Sys.Date()` are projected to decrease. 
